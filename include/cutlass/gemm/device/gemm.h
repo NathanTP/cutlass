@@ -490,6 +490,10 @@ public:
 
     return status;
   }
+
+  typename GemmKernel::Params get_params() {
+    return params_;
+  }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -706,6 +710,10 @@ public:
     }
 
     return status;
+  }
+
+  typename GemmKernel::Params get_params() {
+    return underlying_operator_.get_params();
   }
 };
 
