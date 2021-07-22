@@ -15,6 +15,11 @@
 // Defines cutlass::gemm::device::Gemm, the generic Gemm computation template class.
 #include "cutlass/gemm/device/gemm.h"
 
+typedef struct CudaConfig {
+  dim3 grid_, block_;
+  int smem_size_;
+} CudaConfig;
+
 using ColumnMajor = cutlass::layout::ColumnMajor;
 
 using CutlassGemm = cutlass::gemm::device::Gemm<float,        // Data-type of A matrix
@@ -57,6 +62,18 @@ CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
   return params_ptr;
 }
 
+CudaConfig *getCudaConfig(CutlassGemm::GemmKernel::Params *params_ptr) {
+  CutlassGemm::ThreadblockSwizzle threadblock_swizzle;
+  dim3 grid = threadblock_swizzle.get_grid_shape(params_ptr->grid_tiled_shape);
+  dim3 block(CutlassGemm::GemmKernel::kThreadCount, 1, 1);
+  int smem_size = int(sizeof(typename CutlassGemm::GemmKernel::SharedStorage));
+  CudaConfig* ptr = new CudaConfig;
+  ptr->grid_ = grid;
+  ptr->block_ = block;
+  ptr->smem_size_ = smem_size;
+  return ptr;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // This function defines a CUTLASS GEMM kernel instantiation, constructs its parameters object,
@@ -79,18 +96,15 @@ cudaError_t CutlassSgemmNN(
   int ldc) {
 
   CutlassGemm::GemmKernel::Params *params_ptr = adaptSGEMMArgs(M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
-  // malloc space for gemm_operator.get_params() and memcopy to heap.
-  // Use pointer from malloc to reference
-  // Gemm run function
   cudaStream_t stream = nullptr;
-  CutlassGemm::ThreadblockSwizzle threadblock_swizzle;
-  //typename CutlassGemm::GemmKernel::Params params_;
-  dim3 grid = threadblock_swizzle.get_grid_shape(params_ptr->grid_tiled_shape);
-  dim3 block(CutlassGemm::GemmKernel::kThreadCount, 1, 1);
   cudaError_t result;
-  int smem_size = int(sizeof(typename CutlassGemm::GemmKernel::SharedStorage));
+  CudaConfig *conf = getCudaConfig(params_ptr);
+  dim3 grid = conf->grid_;
+  dim3 block = conf->block_;
+  int smem_size = conf->smem_size_;
   cutlass::Kernel<CutlassGemm::GemmKernel><<<grid, block, smem_size, stream>>>(*params_ptr);
   free(params_ptr);
+  free(conf);
   result = cudaGetLastError();
   if (result != cudaSuccess) {
     return cudaErrorUnknown;
