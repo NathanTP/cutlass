@@ -1,0 +1,100 @@
+
+//============================================================================
+/*
+ * cutlassAdaptors.cpp/h/so
+ *
+ * KaaS Needs This Library
+ * We expect all of these parameters to be provided by the client/KaaS. All
+ * pointers suffixed with _d are device pointers. The returned params should be
+ * suitable for passing to the kernel:
+ *      gemmKern<<<gridSize, blockSize, SmemSize>>>(*params);
+ *
+ * These adapters must be made available in a standalone shared library that
+ * can be loaded by python (cTypes) or another c++ program. This means we need
+ * the source, a header, and a Makefile to generate the .so.
+ */
+params *adaptSGEMMArgs(dim3 gridSize, dim3 blockSize, dim3 SmemSize,
+        int M,
+        int N,
+        int K,
+        float alpha,
+        float const *A_d,
+        int lda,
+        float const *B_d,
+        int ldb,
+        float beta,
+        float *C_d,
+        int ldc);
+//============================================================================
+
+
+//============================================================================
+/*
+ * unitTest.cpp
+ * To be sure that everything works, we should write a unit test in C++. It
+ * will be very similar to basic_gemm.cpp but will use adaptSGEMMArgs() to get
+ * the parameters. Ideally, we would link against cutlassAdaptors.cpp to ensure
+ * that the shared library was generated correctly. 
+ */
+//XXX This is just a sketch of what it might look like:
+int test(M, N, K, float32 *matA_host, float32 *matB_host, float32 *matC_host,...) {
+    gridSize = ...;
+    blockSize = ...;
+    smemSize = ...;
+
+    //Allocate device ptrs
+    matA_dev = allocateDevBufs(matA_host);
+    matB_dev = allocateDevBufs(matB_host);
+    matC_dev = allocateDevBufs(matC_host);
+
+    //anything else needed to set up
+
+    params *p = adaptArgs(...);
+
+    operatorKern<<<...>>>(*params);
+
+    // check result
+}
+//============================================================================
+
+
+//============================================================================
+/*
+ * matMulClient.py
+ * The client will be a KaaS client, it is responsible for allocating inputs
+ * and generating a request for KaaS. You can look at
+ * kaasBenchmarks/inference/kaasSources/sgemm/generateModel.py for an example
+ * of how this would look in practice. Our test will be more complicated since
+ * cutlass provides a more full-featured gemm kernel.
+ *
+ * Here is a rough sketch of what it might look like:
+ */
+
+# We will need a way to derive the kernel dimensions from M, N, and K.
+# Ideally, this would be a pure python function. If necessary, we could call
+# the C code for this, or simply have a helper cpp program that prints them
+# out and we hard-code into our client.
+(gridSz, BlockSz, SmemSz) = getSizes(M,N,K)
+
+A = np.rand()
+B = np.rand()
+C = np.rand()
+
+kv.put(keyA, A.to_bytes())
+kv.put(keyB, B.to_bytes())
+kv.put(keyC, C.to_bytes())
+
+aBuf = kaasBuf(keyA, sizeofA, is_input=True)
+bBuf = kaasBuf(keyB, sizeofB, is_input=True)
+cBuf = kaasBuf(keyC, sizeofC, is_input=True)
+outBuf = kaasBuf(keyOut, sizeofOut, is_output=True)
+
+buffers = [aBuf, bBuf, ...]
+kaasReq = ([sgemm], buffers, literals=[grid, block, smem])
+
+kaasInvoke(kaasReq)
+
+outBytes = kv.get(keyOut)
+outNP = np.from_bytes(outBytes, ...)
+
+//============================================================================

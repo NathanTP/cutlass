@@ -2,6 +2,8 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <stdlib.h>
+#include <stdio.h>
 
 // Helper methods to check for errors
 #include "helper.h"
@@ -12,6 +14,48 @@
 
 // Defines cutlass::gemm::device::Gemm, the generic Gemm computation template class.
 #include "cutlass/gemm/device/gemm.h"
+
+using ColumnMajor = cutlass::layout::ColumnMajor;
+
+using CutlassGemm = cutlass::gemm::device::Gemm<float,        // Data-type of A matrix
+                                                ColumnMajor,  // Layout of A matrix
+                                                float,        // Data-type of B matrix
+                                                ColumnMajor,  // Layout of B matrix
+                                                float,        // Data-type of C matrix
+                                                ColumnMajor>; // Layout of C matrix
+
+CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
+  int M,
+  int N,
+  int K,
+  float alpha,
+  float const *A,
+  int lda,
+  float const *B,
+  int ldb,
+  float beta,
+  float *C,
+  int ldc) {
+  // Define a CUTLASS GEMM type
+  CutlassGemm gemm_operator;
+
+  CutlassGemm::Arguments args({M , N, K},  // Gemm Problem dimensions
+                              {A, lda},    // Tensor-ref for source matrix A
+                              {B, ldb},    // Tensor-ref for source matrix B
+                              {C, ldc},    // Tensor-ref for source matrix C
+                              {C, ldc},    // Tensor-ref for destination matrix D (may be different memory than source C matrix)
+                              {alpha, beta}); // Scalars used in the Epilogue
+
+  // Launch the CUTLASS GEMM kernel.
+  
+  //cutlass::Status status = gemm_operator(args);
+  cudaStream_t stream = nullptr;
+  gemm_operator.initialize(args, stream=stream);
+  CutlassGemm::GemmKernel::Params params_ = gemm_operator.get_params();
+  CutlassGemm::GemmKernel::Params *params_ptr = (CutlassGemm::GemmKernel::Params*) malloc(sizeof(params_));
+  memcpy(params_ptr, &params_, sizeof(params_));
+  return params_ptr;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -34,39 +78,19 @@ cudaError_t CutlassSgemmNN(
   float *C,
   int ldc) {
 
-  using ColumnMajor = cutlass::layout::ColumnMajor;
-
-  using CutlassGemm = cutlass::gemm::device::Gemm<float,        // Data-type of A matrix
-                                                  ColumnMajor,  // Layout of A matrix
-                                                  float,        // Data-type of B matrix
-                                                  ColumnMajor,  // Layout of B matrix
-                                                  float,        // Data-type of C matrix
-                                                  ColumnMajor>; // Layout of C matrix
-
-  // Define a CUTLASS GEMM type
-  CutlassGemm gemm_operator;
-
-  CutlassGemm::Arguments args({M , N, K},  // Gemm Problem dimensions
-                              {A, lda},    // Tensor-ref for source matrix A
-                              {B, ldb},    // Tensor-ref for source matrix B
-                              {C, ldc},    // Tensor-ref for source matrix C
-                              {C, ldc},    // Tensor-ref for destination matrix D (may be different memory than source C matrix)
-                              {alpha, beta}); // Scalars used in the Epilogue
-
-  // Launch the CUTLASS GEMM kernel.
-  
-  //cutlass::Status status = gemm_operator(args);
-  cudaStream_t stream = nullptr;
-  gemm_operator.initialize(args, stream=stream);
+  CutlassGemm::GemmKernel::Params *params_ptr = adaptSGEMMArgs(M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
+  // malloc space for gemm_operator.get_params() and memcopy to heap.
+  // Use pointer from malloc to reference
   // Gemm run function
+  cudaStream_t stream = nullptr;
   CutlassGemm::ThreadblockSwizzle threadblock_swizzle;
   //typename CutlassGemm::GemmKernel::Params params_;
-  dim3 grid = threadblock_swizzle.get_grid_shape(gemm_operator.get_params().grid_tiled_shape);
+  dim3 grid = threadblock_swizzle.get_grid_shape(params_ptr->grid_tiled_shape);
   dim3 block(CutlassGemm::GemmKernel::kThreadCount, 1, 1);
   cudaError_t result;
   int smem_size = int(sizeof(typename CutlassGemm::GemmKernel::SharedStorage));
-  cutlass::Kernel<CutlassGemm::GemmKernel><<<grid, block, smem_size, stream>>>(gemm_operator.get_params());
-  
+  cutlass::Kernel<CutlassGemm::GemmKernel><<<grid, block, smem_size, stream>>>(*params_ptr);
+  free(params_ptr);
   result = cudaGetLastError();
   if (result != cudaSuccess) {
     return cudaErrorUnknown;
