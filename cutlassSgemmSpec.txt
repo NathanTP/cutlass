@@ -13,7 +13,7 @@
  * can be loaded by python (cTypes) or another c++ program. This means we need
  * the source, a header, and a Makefile to generate the .so.
  */
-params *adaptSGEMMArgs(dim3 gridSize, dim3 blockSize, dim3 SmemSize,
+params *adaptSGEMMArgs(
         int M,
         int N,
         int K,
