@@ -1,25 +1,7 @@
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <stdlib.h>
-#include <stdio.h>
 //#include "helper.h"
-#include <cutlass/gemm/device/gemm.h>
+#include "cutlassAdaptors.h"
 
-typedef struct CudaConfig {
-  dim3 grid_, block_;
-  int smem_size_;
-} CudaConfig;
-
-using ColumnMajor = cutlass::layout::ColumnMajor;
-
-using CutlassGemm = cutlass::gemm::device::Gemm<float,        // Data-type of A matrix
-                                                ColumnMajor,  // Layout of A matrix
-                                                float,        // Data-type of B matrix
-                                                ColumnMajor,  // Layout of B matrix
-                                                float,        // Data-type of C matrix
-                                                ColumnMajor>; // Layout of C matrix
-
+//extern "C"
 CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
   int M,
   int N,
@@ -51,6 +33,7 @@ CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
   return params_ptr;
 }
 
+//extern "C"
 CudaConfig *getCudaConfig(CutlassGemm::GemmKernel::Params *params_ptr) {
   CutlassGemm::ThreadblockSwizzle threadblock_swizzle;
   dim3 grid = threadblock_swizzle.get_grid_shape(params_ptr->grid_tiled_shape);
