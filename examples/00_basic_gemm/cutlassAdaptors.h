@@ -19,6 +19,8 @@ typedef struct CudaConfig {
   int smem_size_;
 } CudaConfig;
 
+extern "C" 
 CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(int M,int N,int K,float alpha,float const *A,int lda,float const *B,int ldb,float beta,float *C,int ldc);
 
+extern "C" 
 CudaConfig *getCudaConfig(CutlassGemm::GemmKernel::Params *params_ptr);

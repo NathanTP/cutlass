@@ -1,7 +1,7 @@
 //#include "helper.h"
 #include "cutlassAdaptors.h"
 
-//extern "C"
+extern "C"
 CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
   int M,
   int N,
@@ -33,7 +33,7 @@ CutlassGemm::GemmKernel::Params *adaptSGEMMArgs(
   return params_ptr;
 }
 
-//extern "C"
+extern "C"
 CudaConfig *getCudaConfig(CutlassGemm::GemmKernel::Params *params_ptr) {
   CutlassGemm::ThreadblockSwizzle threadblock_swizzle;
   dim3 grid = threadblock_swizzle.get_grid_shape(params_ptr->grid_tiled_shape);
