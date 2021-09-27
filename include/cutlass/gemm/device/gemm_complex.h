@@ -36,7 +36,8 @@
 #include "cutlass/gemm/threadblock/threadblock_swizzle.h"
 #include "cutlass/gemm/kernel/gemm.h"
 
-#include "cutlass/gemm/kernel/default_gemm_complex.h"
+// #include "cutlass/gemm/kernel/default_gemm_complex.h"
+#include "cutlass/gemm/kernel/default_gemm_planar_complex_universal.h"
 #include "cutlass/gemm/device/default_gemm_configuration.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,11 +244,36 @@ class GemmComplex {
   static int const kAlignmentC = EpilogueOutputOp::kCount;
 
   /// Define the kernel
-  using GemmKernel = typename kernel::DefaultGemmComplex<
+  // using GemmKernel = typename kernel::DefaultGemmComplex<
+  //   ElementA,
+  //   LayoutA,
+  //   ElementB,
+  //   LayoutB,
+  //   ElementC,
+  //   LayoutC,
+  //   ElementAccumulator,
+  //   OperatorClass,
+  //   ArchTag,
+  //   ThreadblockShape,
+  //   WarpShape,
+  //   InstructionShape,
+  //   EpilogueOutputOp,
+  //   ThreadblockSwizzle,
+  //   kStages,
+  //   kTransformA,
+  //   kTransformB,
+  //   Operator,
+  //   kSplitKSerial
+  // >::GemmKernel;
+  using GemmKernel = typename kernel::DefaultGemmPlanarComplexUniversal<
     ElementA,
     LayoutA,
+    kTransformA,
+    kAlignmentA,
     ElementB,
     LayoutB,
+    kTransformB,
+    kAlignmentB,
     ElementC,
     LayoutC,
     ElementAccumulator,
@@ -259,10 +285,7 @@ class GemmComplex {
     EpilogueOutputOp,
     ThreadblockSwizzle,
     kStages,
-    kTransformA,
-    kTransformB,
-    Operator,
-    kSplitKSerial
+    Operator
   >::GemmKernel;
 
   /// Argument structure
@@ -472,6 +495,10 @@ public:
     }
 
     return status;
+  }
+
+  typename GemmKernel::Params get_params() {
+    return params_;
   }
 };
 
@@ -707,6 +734,10 @@ public:
     }
 
     return status;
+  }
+
+  typename GemmKernel::Params get_params() {
+    return underlying_operator_.get_params();
   }
 };
 

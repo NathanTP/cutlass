@@ -27,6 +27,7 @@
     \brief CUTLASS Library handle.
 */
 #include <iostream> 
+#include <tuple>
 #include <stdexcept>
 #include <cstdint>
 
@@ -847,7 +848,39 @@ Status Handle::gemm_planar_complex(
     batch_stride_D_imag
   };
 
-  return operation->run(&arguments, host_workspace, workspace_, stream_);
+  operation->run(&arguments, host_workspace, workspace_, stream_);
+
+  using GemmKernel = typename cutlass::gemm::kernel::DefaultGemmPlanarComplexUniversal<
+        cutlass::half_t, cutlass::layout::RowMajor, cutlass::ComplexTransform::kNone, 8,
+        cutlass::half_t, cutlass::layout::RowMajor, cutlass::ComplexTransform::kConjugate, 8,
+        cutlass::half_t, cutlass::layout::RowMajor,
+        float,
+        cutlass::arch::OpClassTensorOp,
+        cutlass::arch::Sm70,
+        cutlass::gemm::GemmShape<64, 64, 32>,
+        cutlass::gemm::GemmShape<32, 32, 32>,
+        cutlass::gemm::GemmShape<8, 8, 4>,
+        cutlass::epilogue::thread::LinearCombinationPlanarComplex<
+          cutlass::half_t,
+          8,
+          float,
+          float
+        >,
+        cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,
+        2,
+        cutlass::arch::OpMultiplyAdd
+      >::GemmKernel;
+
+  GemmKernel::Params params_ = (GemmKernel::Params) operation->get_params(host_workspace);
+  std::tuple<dim3, dim3, int> conf = (std::tuple<dim3, dim3, int>) operation->get_config(host_workspace);
+  dim3 grid_ = std::get<0>(conf);
+  dim3 block_ = std::get<1>(conf);
+  int smem_size_ = std::get<2>(conf);
+
+  cutlass::Kernel<GemmKernel><<<grid_, block_, smem_size_, stream_>>>(params_);
+  // No status error checking right now
+  return Status::kSuccess;
+  // return operation->run(&arguments, host_workspace, workspace_, stream_);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

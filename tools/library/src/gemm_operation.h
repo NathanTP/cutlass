@@ -917,10 +917,29 @@ public:
       return status;
     }
     
-    status = op->run(stream);
+    // status = op->run(stream);
     
     return status;
   }
+
+  virtual void get_params(
+    void *host_workspace
+    ) const {
+    
+    Operator *op = static_cast<Operator *>(host_workspace);
+    
+    return op->get_params();
+  }
+
+  virtual void get_config(
+    void *host_workspace
+    ) const {
+    
+    Operator *op = static_cast<Operator *>(host_workspace);
+    
+    return op->get_config();
+  }
+
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

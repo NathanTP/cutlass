@@ -31,6 +31,8 @@
 #pragma once
 
 #include <limits>
+#include <tuple>
+#include <iostream>
 
 #include "cutlass/cutlass.h"
 #include "cutlass/numeric_types.h"
@@ -45,6 +47,15 @@
 #include "cutlass/gemm/device/default_gemm_configuration.h"
 
 #include "cutlass/trace.h"
+
+
+#include "cutlass/arch/wmma.h"
+#include "cutlass/cutlass.h"
+#include "cutlass/library/library.h"
+#include "cutlass/library/manifest.h"
+
+#include "library_internal.h"
+#include "gemm_operation.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -370,12 +381,39 @@ public:
     //
     // Launch kernel
     //
-
+    
     CUTLASS_TRACE_HOST("  grid: (" << grid << "),  block: (" << block 
       << "),  SMEM: " << smem_size << " bytes");
 
     // Launch
+    printf("type is %s\n", (typeid(GemmKernel).name())+2);
+    if (strcmp((typeid(GemmKernel).name())+2, "cutlass_tensorop_f16_s884gemm_planar_complex_f16_64x64_32x2_cn_align8") == 0) {
+      printf("kernel matched\n");
+      using GemmKernel = typename cutlass::gemm::kernel::DefaultGemmPlanarComplexUniversal<
+        cutlass::half_t, cutlass::layout::RowMajor, cutlass::ComplexTransform::kNone, 8,
+        cutlass::half_t, cutlass::layout::RowMajor, cutlass::ComplexTransform::kConjugate, 8,
+        cutlass::half_t, cutlass::layout::RowMajor,
+        float,
+        cutlass::arch::OpClassTensorOp,
+        cutlass::arch::Sm70,
+        cutlass::gemm::GemmShape<64, 64, 32>,
+        cutlass::gemm::GemmShape<32, 32, 32>,
+        cutlass::gemm::GemmShape<8, 8, 4>,
+        cutlass::epilogue::thread::LinearCombinationPlanarComplex<
+          cutlass::half_t,
+          8,
+          float,
+          float
+        >,
+        cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>,
+        2,
+        cutlass::arch::OpMultiplyAdd
+      >::GemmKernel;
+    }
     cutlass::Kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params_);
+
+    // Original one-line code
+    // cutlass::Kernel<GemmKernel><<<grid, block, smem_size, stream>>>(params_);
 
     //
     // Query for errors
@@ -408,6 +446,27 @@ public:
     }
 
     return status;
+  }
+
+  //---------Extra Helper Functions---------
+  // Get parameters
+  typename GemmKernel::Params get_params() {
+    return params_;
+  }
+
+  std::tuple<dim3, dim3, int> get_config() {
+    // do it right before run()
+    CUTLASS_TRACE_HOST("GemmUniversalBase::run()");
+
+    ThreadblockSwizzle threadblock_swizzle;
+    dim3 grid = threadblock_swizzle.get_grid_shape(params_.grid_tiled_shape);
+    dim3 block(GemmKernel::kThreadCount, 1, 1);
+    int smem_size = int(sizeof(typename GemmKernel::SharedStorage));
+
+    CUTLASS_TRACE_HOST("  grid: (" << grid << "),  block: (" << block 
+      << "),  SMEM: " << smem_size << " bytes");
+
+    return std::make_tuple(grid, block, smem_size);
   }
 };
 
